@@ -1,35 +1,42 @@
 # --- Imports ---
-import re, sys
-from config.variables import LINE
+import re, sys, os
+from config.variables import *
+from git import Repo, InvalidGitRepositoryError, NoSuchPathError
 
 # --- Repo validating function ---
 def validateRepo(repo):
-    repo = repo.strip().encode().decode('unicode_escape')
+    repo = repo.strip()
 
-    # --- 1. Full HTTPS URL pattern ---
+    # --- 1. HTTPS Git URL (any domain) ---
     httpsPattern = re.compile(
-        r"^https://github\.com/[\w.-]+/[\w.-]+(?:/tree/[\w./-]+)?(?:\.git)?$"
+        r"^https://[\w.-]+(?:/[\w./-]+)*\.git$"
     )
 
-    # --- 2. SSH Git URL pattern ---
+    # --- 2. SSH Git URL (any domain) ---
     sshPattern = re.compile(
-        r"^git@github\.com:[\w.-]+/[\w.-]+(?:\.git)?$"
+        r"^(git|ssh)@[\w.-]+:[\w./-]+\.git$"
     )
 
-    # --- 3. GitHub shorthand like user/repo[/tree/...] ---
-    shorthandPattern = re.compile(
-        r"^[\w.-]+/[\w.-]+(?:/tree/[\w./-]+)?$"
-    )
+    # --- 3. Local or relative repo path ---
+    if os.path.exists(repo):
+        abs_path = os.path.abspath(repo)
+        # print(f"Detected local repository: {abs_path}")
+        return abs_path
 
-    # --- Match checks ---
-
+    # --- 4. HTTPS or SSH remote Git URLs ---
     if httpsPattern.match(repo) or sshPattern.match(repo):
+        # print(f"Detected remote Git repository: {repo}")
         return repo
 
+    # --- 5. GitHub shorthand like 'user/repo' (optional fallback) ---
+    shorthandPattern = re.compile(r"^[\w.-]+/[\w.-]+$")
     if shorthandPattern.match(repo):
-        return f"https://github.com/{repo}"
+        url = f"https://github.com/{repo}.git"
+        # print(f"Interpreting shorthand '{repo}' as {url}")
+        return url
 
-    sys.exit(f"Invalid repo format: '{repo}'. Must be a valid GitHub repository url or user/repo path.\n{LINE}")
+    # --- 6. Otherwise invalid ---
+    sys.exit(f"❌ Invalid repository format: '{repo}'.\nMust be a valid .git URL, SSH path, or local repo directory.")
 
 # --- Validating amount commits type check function ---
 def validateN(n):
@@ -51,3 +58,12 @@ def validateOutput(output):
         output = "report.json"
 
     return output
+
+# --- Is it a Git Repo check function ---
+def isGitRepo(repo):
+    try:
+        _ = Repo(repo)
+        return True
+    except (InvalidGitRepositoryError, NoSuchPathError):
+        print(f"Given path isn't a git repository: {repo}\n{LINE}")
+        return False
