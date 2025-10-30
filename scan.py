@@ -76,10 +76,13 @@ if len(gitRepo) > 1 and amountCommits > 0 and len(outputFile) > 1:
             continue
 
         for line in diff_text.splitlines():
+            if line.startswith("+++ b/"):
+                currentFile = line[6:].strip()
+
             if line.startswith("+") and not line.startswith("+++"):
                 diffs.append({
                     "commit": commit.hexsha,
-                    "file": None,
+                    "file": currentFile,
                     "line": line[1:].strip()
                 })
 
