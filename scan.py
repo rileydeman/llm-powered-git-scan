@@ -7,11 +7,13 @@ from config.packages import checkPackages
 checkPackages()
 
 # --- Imports ---
-import argparse, gpt4all, json, os, shutil, tempfile, tqdm, time
+import argparse, json, os, shutil, tempfile, tqdm, time, importlib.util, subprocess, sys
 from config.variables import *
 from config.functions import validateRepo, validateN, validateOutput, isGitRepo
 from git import Repo
 from git.exc import GitCommandError
+from gpt4all import GPT4All
+from huggingface_hub import hf_hub_download
 
 # --- Set parser arguments ---
 parser = argparse.ArgumentParser()
@@ -51,7 +53,20 @@ if len(gitRepo) > 1 and amountCommits > 0 and len(outputFile) > 1:
         print(f"\nRepo successfully cloned!\n{LINE}")
 
 
-    # --- Analysing Commits ---
+    # --- Analyzing Commits ---
+
+    pbarTotal = 3
+
+    print(f"\nStarting with analyzing commit diffs for sensitive data...")
+
+    if not os.path.exists(f"llm/{LLM_FILE_NAME}"):
+        print(f"LLM file not found, analyse may take 5 to 15 minutes longer due to extra installation (from around 5.7GB).\n")
+        pbarTotal += 1
+    else:
+        print("\n")
+
+    pbarTotal += (amountCommits - 1)
+    pbar = tqdm.tqdm(total=pbarTotal, desc="Analyzing commit diffs", bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}]")
 
     # 1. Get Commits from repo
     if repoCloned:
@@ -61,7 +76,9 @@ if len(gitRepo) > 1 and amountCommits > 0 and len(outputFile) > 1:
 
     commits = list(repo.iter_commits("HEAD", max_count=amountCommits))
 
-    print(commits)
+    pbar.update(1)
+
+    # print(commits)
 
     # 2. Get diffs from commits
     for commit in commits:
@@ -86,4 +103,32 @@ if len(gitRepo) > 1 and amountCommits > 0 and len(outputFile) > 1:
                     "line": line[1:].strip()
                 })
 
-    print(diffs)
+    pbar.update(1)
+
+    # print(diffs)
+
+    # 3. Scanning data for sensitive data
+
+    # 3.1. Downloading LLM file (if needed)
+    baseDir = os.path.dirname(os.path.abspath(__file__))
+
+    if not os.path.exists(f"llm/{LLM_FILE_NAME}"):
+        llmDir = os.path.join(baseDir, "llm")
+
+        if not os.path.exists(llmDir):
+            os.mkdir(llmDir)
+
+        llmPath = hf_hub_download(
+            repo_id=MODEL_REPO,
+            filename=LLM_FILE_NAME,
+            cache_dir=llmDir,
+        )
+
+        shutil.copyfile(llmPath, os.path.join(llmDir, LLM_FILE_NAME))
+        shutil.rmtree(f"{llmDir}/.locks")
+        shutil.rmtree(f"{llmDir}/models--tensorblock--gpt4all-falcon-GGUF")
+
+        pbar.update(1)
+
+    pbar.update(1)
+    pbar.close()

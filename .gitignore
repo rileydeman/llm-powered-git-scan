@@ -53,3 +53,6 @@ db.sqlite3-journal
 # OS-specific files
 .DS_Store    # macOS
 Thumbs.db    # Windows
+
+# Extra files/folders
+llm/

@@ -16,6 +16,10 @@ packages = [
     {
         "name": "gpt4all",
         "installed": bool(False)
+    },
+    {
+        "name": "huggingface_hub",
+        "installed": bool(False)
     }
 ]
 
