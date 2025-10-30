@@ -7,13 +7,14 @@ from config.packages import checkPackages
 checkPackages()
 
 # --- Imports ---
-import argparse, json, os, shutil, tempfile, tqdm, time, importlib.util, subprocess, sys
+import argparse, json, os, shutil, tempfile, tqdm, time, sys, io, warnings
+
 from config.variables import *
 from config.functions import validateRepo, validateN, validateOutput, isGitRepo
 from git import Repo
 from git.exc import GitCommandError
-from gpt4all import GPT4All
 from huggingface_hub import hf_hub_download
+from gpt4all import GPT4All
 
 # --- Set parser arguments ---
 parser = argparse.ArgumentParser()
@@ -29,6 +30,8 @@ amountCommits = validateN(args.n)
 outputFile = validateOutput(args.out)
 
 # --- Main program ---
+warnings.filterwarnings("ignore", message=r".*Failed to load llamamodel.*", category=UserWarning)
+
 if len(gitRepo) > 1 and amountCommits > 0 and len(outputFile) > 1:
     print("Checking location of given Git Repo...\n")
 
@@ -54,18 +57,16 @@ if len(gitRepo) > 1 and amountCommits > 0 and len(outputFile) > 1:
 
 
     # --- Analyzing Commits ---
-
     pbarTotal = 3
 
     print(f"\nStarting with analyzing commit diffs for sensitive data...")
 
     if not os.path.exists(f"llm/{LLM_FILE_NAME}"):
         print(f"LLM file not found, analyse may take 5 to 15 minutes longer due to extra installation (from around 5.7GB).\n")
-        pbarTotal += 1
+        pbarTotal += 5
     else:
         print("\n")
 
-    pbarTotal += (amountCommits - 1)
     pbar = tqdm.tqdm(total=pbarTotal, desc="Analyzing commit diffs", bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}]")
 
     # 1. Get Commits from repo
@@ -103,6 +104,8 @@ if len(gitRepo) > 1 and amountCommits > 0 and len(outputFile) > 1:
                     "line": line[1:].strip()
                 })
 
+    pbar.total += len(diffs)
+    pbar.refresh()
     pbar.update(1)
 
     # print(diffs)
@@ -127,6 +130,53 @@ if len(gitRepo) > 1 and amountCommits > 0 and len(outputFile) > 1:
         shutil.copyfile(llmPath, os.path.join(llmDir, LLM_FILE_NAME))
         shutil.rmtree(f"{llmDir}/.locks")
         shutil.rmtree(f"{llmDir}/models--tensorblock--gpt4all-falcon-GGUF")
+
+        pbar.update(5)
+
+    # 3.2 Analyzing with LLM
+    model = GPT4All(model_name=f"{baseDir}/llm/{LLM_FILE_NAME}")
+
+    for diff in diffs:
+        commitHash = diff["commit"]
+        diffText = diff["line"]
+        filePath = diff["file"]
+        result = None
+
+        prompt = f"""
+        You are a professional security auditor that checks code changes for secrets or sensitive data.
+
+        Below is a single line of modified code from a Git commit.
+        Your task is to determine if it contains sensitive information.
+
+        ---
+        Commit: {commitHash}
+        File: {filePath}
+        Modified line:
+        {diffText}
+        ---
+
+        Return your analysis ONLY as a **single JSON object** with no commentary or explanation.
+        Use this exact schema, and fill in actual values (so replace only the text in the brackets including the brackets):
+        {{
+          "contains_sensitive_data": (your input in only true or false),
+          "confidence": (your input in only a number between 0 and 100),
+          "reason": "(your input in text as your explanation)"
+        }}
+        """
+
+        print(diffText)
+        output = model.generate(prompt, max_tokens=512, temp=0.1)
+
+        try:
+            result = json.loads(output)
+        except json.decoder.JSONDecodeError:
+            result = {
+                "contains_sensitive_data": False,
+                "confidence": 0,
+                "reason": "Failed to parse LLM response"
+            }
+
+        print(result)
 
         pbar.update(1)
 
