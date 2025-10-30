@@ -36,14 +36,14 @@ def validateRepo(repo):
         return url
 
     # --- 6. Otherwise invalid ---
-    sys.exit(f"❌ Invalid repository format: '{repo}'.\nMust be a valid .git URL, SSH path, or local repo directory.")
+    sys.exit(f"Invalid repository format: '{repo}'.\nMust be a valid .git URL, SSH path, or local repo directory.")
 
 # --- Validating amount commits type check function ---
 def validateN(n):
     if type(n) == int and n > 0:
-        return n
+        return (n + 1)
     else:
-        return int(5)
+        return int(6)
 
 # --- Validating output file function ---
 def validateOutput(output):
