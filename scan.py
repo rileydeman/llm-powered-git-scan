@@ -7,7 +7,7 @@ from config.packages import checkPackages
 checkPackages()
 
 # --- Imports ---
-import argparse, os
+import argparse, os, shutil, tempfile, tqdm, time
 from config.variables import *
 from config.functions import validateRepo, validateN, validateOutput, isGitRepo
 from git import Repo
@@ -32,4 +32,19 @@ if len(gitRepo) > 1 and amountCommits > 0 and len(outputFile) > 1:
     if os.path.isdir(gitRepo) and isGitRepo(gitRepo):
         print(f"Local Repo Detected: {gitRepo}\n{LINE}")
     elif gitRepo.endswith(".git"):
-        print(f"External Repo Detected: {gitRepo}\n")
+        print(f"External Repo Detected: {gitRepo}\nRequired cloning, progress starts now...\n")
+
+        # Cloning the external repo to the device
+        pbar = tqdm.tqdm(total=3, desc="Cloning Git Repo", bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}]")
+
+        pbar.update(1)
+        tempDir = tempfile.mkdtemp(prefix="gitscan-") # Making a temporary folder
+        time.sleep(1)
+        Repo.clone_from(gitRepo, tempDir, depth=amountCommits) # Cloning the repository
+        pbar.update(1)
+        repoCloned = True # Switching the repoCloned var to True
+        time.sleep(1)
+        pbar.update(1)
+        pbar.close()
+
+        print(f"\nRepo successfully cloned!\n{LINE}")
