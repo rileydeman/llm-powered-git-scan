@@ -82,7 +82,7 @@ Follow these steps to install and run **gitscan**:
    **Option 1 (most common):**
    ```bash
    python scan.py --repo <repo_url_or_local_path> --n <commit_count> --out <output_name>.json
-
+   ```
    Option 2:
     ```bash
    py scan.py --repo <repo_url_or_local_path> --n <commit_count> --out <output_name>.json
