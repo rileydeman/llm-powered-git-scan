@@ -14,11 +14,11 @@ packages = [
         "installed": bool(False)
     },
     {
-        "name": "gpt4all",
+        "name": "dotenv",
         "installed": bool(False)
     },
     {
-        "name": "huggingface_hub",
+        "name": "openai",
         "installed": bool(False)
     }
 ]

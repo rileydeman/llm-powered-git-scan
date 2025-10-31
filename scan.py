@@ -1,4 +1,7 @@
 # --- Python Version Check ---
+import pprint
+from os.path import exists
+
 from config.version import checkPyVersion
 checkPyVersion()
 
@@ -7,14 +10,15 @@ from config.packages import checkPackages
 checkPackages()
 
 # --- Imports ---
-import argparse, json, os, shutil, tempfile, tqdm, time, sys, io, warnings
+import argparse, json, os, shutil, tempfile, tqdm, time, sys, warnings
 
 from config.variables import *
 from config.functions import validateRepo, validateN, validateOutput, isGitRepo
 from git import Repo
 from git.exc import GitCommandError
-from huggingface_hub import hf_hub_download
-from gpt4all import GPT4All
+from dotenv import load_dotenv
+from openai import OpenAI
+
 
 # --- Set parser arguments ---
 parser = argparse.ArgumentParser()
@@ -59,13 +63,7 @@ if len(gitRepo) > 1 and amountCommits > 0 and len(outputFile) > 1:
     # --- Analyzing Commits ---
     pbarTotal = 3
 
-    print(f"\nStarting with analyzing commit diffs for sensitive data...")
-
-    if not os.path.exists(f"llm/{LLM_FILE_NAME}"):
-        print(f"LLM file not found, analyse may take 5 to 15 minutes longer due to extra installation (from around 5.7GB).\n")
-        pbarTotal += 5
-    else:
-        print("\n")
+    print(f"\nStarting with analyzing commit diffs for sensitive data...\n")
 
     pbar = tqdm.tqdm(total=pbarTotal, desc="Analyzing commit diffs", bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}]")
 
@@ -78,8 +76,6 @@ if len(gitRepo) > 1 and amountCommits > 0 and len(outputFile) > 1:
     commits = list(repo.iter_commits("HEAD", max_count=amountCommits))
 
     pbar.update(1)
-
-    # print(commits)
 
     # 2. Get diffs from commits
     for commit in commits:
@@ -108,77 +104,87 @@ if len(gitRepo) > 1 and amountCommits > 0 and len(outputFile) > 1:
     pbar.refresh()
     pbar.update(1)
 
-    # print(diffs)
-
     # 3. Scanning data for sensitive data
 
-    # 3.1. Downloading LLM file (if needed)
-    baseDir = os.path.dirname(os.path.abspath(__file__))
+    # 3.1. Making batches for the LLM
+    diffBatches = list()
 
-    if not os.path.exists(f"llm/{LLM_FILE_NAME}"):
-        llmDir = os.path.join(baseDir, "llm")
+    if len(diffs) <= 20:
+        diffBatches.append(diffs)
+        pbar.update(len(diffs))
+    else:
+        currentDiffIndex = 0
+        currentBatch = 0
+        inCurrentBatch = 0
 
-        if not os.path.exists(llmDir):
-            os.mkdir(llmDir)
+        for diff in diffs:
+            if len(diffBatches) <= currentBatch:
+                diffBatches.append([])
 
-        llmPath = hf_hub_download(
-            repo_id=MODEL_REPO,
-            filename=LLM_FILE_NAME,
-            cache_dir=llmDir,
-        )
+            diffBatches[currentBatch].append(diff)
+            inCurrentBatch += 1
 
-        shutil.copyfile(llmPath, os.path.join(llmDir, LLM_FILE_NAME))
-        shutil.rmtree(f"{llmDir}/.locks")
-        shutil.rmtree(f"{llmDir}/models--tensorblock--gpt4all-falcon-GGUF")
+            if inCurrentBatch == 20:
+                currentBatch += 1
+                inCurrentBatch = 0
 
-        pbar.update(5)
+            pbar.update(1)
 
-    # 3.2 Analyzing with LLM
-    model = GPT4All(model_name=f"{baseDir}/llm/{LLM_FILE_NAME}")
+    pbar.total += len(diffBatches)
+    pbar.refresh()
 
-    for diff in diffs:
-        commitHash = diff["commit"]
-        diffText = diff["line"]
-        filePath = diff["file"]
-        result = None
+    # 3.2. Analyzing with LLM
+    load_dotenv()
+    api_key = os.getenv("OPENAI_API_KEY")
+
+    if not api_key:
+        sys.exit("OPENAI_API_KEY not set, please set it in the .env file!")
+
+    client = OpenAI(api_key=api_key)
+
+    for batch in diffBatches:
+        diffBlock = ""
+
+        for i, diff in enumerate(batch):
+            diffBlock += f"""
+            DIFF #{i+1}
+            Commit: {diff["commit"]}
+            File: {diff["file"]}
+            Modified line:
+            {diff["line"]}
+            ---
+            """
 
         prompt = f"""
-        You are a professional security auditor that checks code changes for secrets or sensitive data.
-
-        Below is a single line of modified code from a Git commit.
-        Your task is to determine if it contains sensitive information.
-
-        ---
-        Commit: {commitHash}
-        File: {filePath}
-        Modified line:
-        {diffText}
-        ---
-
-        Return your analysis ONLY as a **single JSON object** with no commentary or explanation.
-        Use this exact schema, and fill in actual values (so replace only the text in the brackets including the brackets):
+        You are a professional security auditor analyzing Git commit diffs for potential secrets or sensitive data.
+        
+        Analyze each DIFF separately and return a **single valid JSON array** with one object per DIFF:
         {{
-          "contains_sensitive_data": (your input in only true or false),
-          "confidence": (your input in only a number between 0 and 100),
-          "reason": "(your input in text as your explanation)"
+            "diff_line": <the modified line>,
+            "contains_sensitive_data": true/false,
+            "confidence": <integer 0-100>,
+            "reason": "<short explanation>"
         }}
+        
+        Return **only JSON**, nothing else.
+        {diffBlock}
         """
 
-        print(diffText)
-        output = model.generate(prompt, max_tokens=512, temp=0.1)
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a JSON-only security analysis assistant."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.3,
+            response_format={"type": "json_object"}
+        )
 
-        try:
-            result = json.loads(output)
-        except json.decoder.JSONDecodeError:
-            result = {
-                "contains_sensitive_data": False,
-                "confidence": 0,
-                "reason": "Failed to parse LLM response"
-            }
-
-        print(result)
-
+        output = json.loads(response.choices[0].message.content)
+        llmResults.append(output["results"])
         pbar.update(1)
 
     pbar.update(1)
     pbar.close()
+
+    pprint.pprint(llmResults)
