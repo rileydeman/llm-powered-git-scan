@@ -97,7 +97,15 @@ if len(gitRepo) > 1 and amountCommits > 0 and len(outputFile) > 1:
                 diffs.append({
                     "commit": commit.hexsha,
                     "file": currentFile,
-                    "line": line[1:].strip()
+                    "line": line[1:].strip(),
+                    "type": "added"
+                })
+            elif line.startswith('-') and not line.startswith('---'):
+                diffs.append({
+                    "commit": commit.hexsha,
+                    "file": currentFile,
+                    "line": line[1:].strip(),
+                    "type": "removed"
                 })
 
     pbar.total += 3 * len(diffs)
