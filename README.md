@@ -81,15 +81,15 @@ Follow these steps to install and run **gitscan**:
 
    **Option 1 (most common):**
    ```bash
-   python scan.py --repo "<repo_url_or_local_path>" --n <commit_count> --out "<output_name>.json"
+   python scan.py --repo <repo_url_or_local_path> --n <commit_count> --out <output_name>.json
 
    Option 2:
     ```bash
-   py scan.py --repo "<repo_url_or_local_path>" --n <commit_count> --out "<output_name>.json"
+   py scan.py --repo <repo_url_or_local_path> --n <commit_count> --out <output_name>.json
     ```
    Example:
     ```bash
-   python scan.py --repo "https://github.com/example/project.git" --n 10 --out "scan_results.json"
+   python scan.py --repo https://github.com/example/project.git --n 10 --out scan_results.json
     ```
 6. **First-time setup**
    - On your first run, the program will automatically:
@@ -128,7 +128,7 @@ Once installed and configured, you can start scanning repositories directly from
 ### 🧩 Basic Command
 
 ```bash
-py scan.py --repo "<repo_url_or_local_path>" --n <commit_count> --out "<output_name>.json"
+py scan.py --repo <repo_url_or_local_path> --n <commit_count> --out <output_name>.json
 ```
 <table>
 <thead>
@@ -172,7 +172,7 @@ py scan.py --repo "<repo_url_or_local_path>" --n <commit_count> --out "<output_n
 ### 🧾 Example Workflow
 
 ```bash
-py scan.py --repo "https://github.com/org/app.git" --n 15 --out "report.json"
+py scan.py --repo https://github.com/org/app.git --n 15 --out report.json
 ````
 ---
 
@@ -279,11 +279,11 @@ If your output JSON file is empty or incomplete:
 - You can safely delete it manually:
 - On Windows:  
   ```
-  %TEMP%\gitscan_tmp_*
+  %TEMP%\gitscan-*
   ```
 - On macOS/Linux:  
   ```
-  /tmp/gitscan_tmp_*
+  /tmp/gitscan-*
   ```
 
 ### 🔹 Seeing CUDA or GPU-related errors
