@@ -61,7 +61,7 @@ if len(gitRepo) > 1 and amountCommits > 0 and len(outputFile) > 1:
 
 
     # --- Analyzing Commits ---
-    pbarTotal = 3
+    pbarTotal = 4
 
     print(f"\nStarting with analyzing commit diffs for sensitive data...\n")
 
@@ -100,7 +100,7 @@ if len(gitRepo) > 1 and amountCommits > 0 and len(outputFile) > 1:
                     "line": line[1:].strip()
                 })
 
-    pbar.total += len(diffs)
+    pbar.total += 3 * len(diffs)
     pbar.refresh()
     pbar.update(1)
 
@@ -185,6 +185,34 @@ if len(gitRepo) > 1 and amountCommits > 0 and len(outputFile) > 1:
         pbar.update(1)
 
     pbar.update(1)
-    pbar.close()
 
-    pprint.pprint(llmResults)
+    # 4. Rewriting arrays for response
+    for i, diff in enumerate(diffs):
+
+        for batch in llmResults:
+            for item in batch:
+                if diff["line"] == item["diff_line"]:
+                    diffs[i]["result"] = {
+                        "contains_sensitive_data": item["contains_sensitive_data"],
+                        "confidence": item["confidence"],
+                        "reason": item["reason"]
+                    }
+
+        pbar.update(1)
+
+    results = {
+        "repo": gitRepo,
+        "amount_commits_scanned": amountCommits - 1,
+        "foundings": list()
+    }
+
+    for diff in diffs:
+        if diff["result"]["contains_sensitive_data"]:
+            results["foundings"].append(diffs)
+
+        pbar.update(1)
+
+    pbar.update(1)
+
+    pprint.pprint(results)
+    pbar.close()

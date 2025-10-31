@@ -16,3 +16,4 @@ commits = list()
 diffs = list()
 llmResults = list()
 llmPath = None
+results = {}
