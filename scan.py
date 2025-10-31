@@ -1,5 +1,6 @@
 # --- Python Version Check ---
 import pprint
+from os import mkdir
 from os.path import exists
 
 from config.version import checkPyVersion
@@ -14,6 +15,7 @@ import argparse, json, os, shutil, tempfile, tqdm, time, sys, warnings
 
 from config.variables import *
 from config.functions import validateRepo, validateN, validateOutput, isGitRepo
+from pathlib import Path
 from git import Repo
 from git.exc import GitCommandError
 from dotenv import load_dotenv
@@ -61,9 +63,9 @@ if len(gitRepo) > 1 and amountCommits > 0 and len(outputFile) > 1:
 
 
     # --- Analyzing Commits ---
-    pbarTotal = 4
+    pbarTotal = 5
 
-    print(f"\nStarting with analyzing commit diffs for sensitive data...\n")
+    print(f"DStarting with analyzing commit diffs for sensitive data...\n")
 
     pbar = tqdm.tqdm(total=pbarTotal, desc="Analyzing commit diffs", bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}]")
 
@@ -190,10 +192,7 @@ if len(gitRepo) > 1 and amountCommits > 0 and len(outputFile) > 1:
 
         output = json.loads(response.choices[0].message.content)
 
-        if output["results"]:
-            llmResults.append(output["results"])
-        else:
-            llmResults.append(output)
+        llmResults.append(output.get("results", output))
 
         pbar.update(1)
 
@@ -233,6 +232,23 @@ if len(gitRepo) > 1 and amountCommits > 0 and len(outputFile) > 1:
         pbar.update(1)
 
     pbar.update(1)
+    time.sleep(5)
 
-    pprint.pprint(results)
+    # 5. Saving json file
+    documentsDir = Path.home() / "Documents"
+    gitscanDir = documentsDir / "gitscan"
+    gitScanFile = gitscanDir / outputFile
+
+    if not os.path.exists(gitscanDir):
+        gitscanDir.mkdir(parents=True, exist_ok=True)
+
+    with open(gitScanFile, "w") as f:
+        json.dump(results, f, indent=4)
+
+    pbar.update(1)
     pbar.close()
+
+    if os.path.exists(tempDir):
+        shutil.rmtree(tempDir, ignore_errors=True)
+
+    print(f"\nAnalyse ready and saved to this location: {gitScanFile}\n{LINE}")
