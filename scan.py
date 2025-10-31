@@ -170,11 +170,11 @@ if len(gitRepo) > 1 and amountCommits > 0 and len(outputFile) > 1:
         {{
             "diff_line": <the modified line>,
             "contains_sensitive_data": true/false,
-            "confidence": <integer 0-100>,
+            "confidence": <integer 0-100, the amount of percentage that you are confident of the findings>,
             "reason": "<short explanation>"
         }}
         
-        Return **only JSON**, nothing else.
+        Return **only JSON** with the object items in it, nothing else.
         {diffBlock}
         """
 
@@ -189,7 +189,12 @@ if len(gitRepo) > 1 and amountCommits > 0 and len(outputFile) > 1:
         )
 
         output = json.loads(response.choices[0].message.content)
-        llmResults.append(output["results"])
+
+        if output["results"]:
+            llmResults.append(output["results"])
+        else:
+            llmResults.append(output)
+
         pbar.update(1)
 
     pbar.update(1)
@@ -211,12 +216,19 @@ if len(gitRepo) > 1 and amountCommits > 0 and len(outputFile) > 1:
     results = {
         "repo": gitRepo,
         "amount_commits_scanned": amountCommits - 1,
-        "foundings": list()
+        "foundings": {}
     }
 
     for diff in diffs:
         if diff["result"]["contains_sensitive_data"]:
-            results["foundings"].append(diffs)
+            item = {
+                "type": diff["type"],
+                "line": diff["line"],
+                "file": diff["file"],
+                "result": diff["result"]
+            }
+            results["foundings"].setdefault(diff["commit"], [])
+            results["foundings"][diff["commit"]].append(item)
 
         pbar.update(1)
 
